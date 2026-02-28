@@ -1,0 +1,56 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@theme {
+	--color-background: hsl(var(--background));
+	--color-foreground: hsl(var(--foreground));
+	--color-card: hsl(var(--card));
+	--color-card-foreground: hsl(var(--card-foreground));
+	--color-popover: hsl(var(--popover));
+	--color-popover-foreground: hsl(var(--popover-foreground));
+	--color-primary: hsl(var(--primary));
+	--color-primary-foreground: hsl(var(--primary-foreground));
+	--color-secondary: hsl(var(--secondary));
+	--color-secondary-foreground: hsl(var(--secondary-foreground));
+	--color-muted: hsl(var(--muted));
+	--color-muted-foreground: hsl(var(--muted-foreground));
+	--color-accent: hsl(var(--accent));
+	--color-accent-foreground: hsl(var(--accent-foreground));
+	--color-destructive: hsl(var(--destructive));
+	--color-border: hsl(var(--border));
+	--color-input: hsl(var(--input));
+	--color-ring: hsl(var(--ring));
+}
+
+:root {
+	--background: 220 26% 98%;
+	--foreground: 240 14% 10%;
+	--card: 0 0% 100%;
+	--card-foreground: 240 14% 10%;
+	--popover: 0 0% 100%;
+	--popover-foreground: 240 14% 10%;
+	--primary: 252 87% 60%;
+	--primary-foreground: 0 0% 100%;
+	--secondary: 250 35% 94%;
+	--secondary-foreground: 249 29% 28%;
+	--muted: 240 17% 94%;
+	--muted-foreground: 240 10% 40%;
+	--accent: 252 80% 94%;
+	--accent-foreground: 252 52% 32%;
+	--destructive: 0 72% 51%;
+	--border: 240 14% 88%;
+	--input: 240 12% 90%;
+	--ring: 252 87% 60%;
+}
+
+* {
+	border-color: hsl(var(--border));
+}
+
+body {
+	margin: 0;
+	min-height: 100vh;
+	background-color: hsl(var(--background));
+	color: hsl(var(--foreground));
+	font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
