@@ -11,6 +11,7 @@ const {
   K_CONTACT,
   C_CONTACT,
   SUB_STEPS,
+  HARDENING_COEFFICIENT,
 } = SIMULATION_CONSTANTS;
 
 const WALL_EDGE = WALL_X + WALL_THICKNESS;
@@ -22,7 +23,7 @@ export function rk4Step(
   dt: number,
   t: number
 ): StateVector {
-  // Sub-stepping para estabilidad numérica en colisiones
+  // Sub-stepping para estabilidad numérica en colisiones y no-linealidad
   const subDt = dt / SUB_STEPS;
   let currentState = state;
   let currentTime = t;
@@ -61,26 +62,66 @@ export function rk4Step(
   return currentState;
 }
 
+/**
+ * Calcula la fuerza de un resorte real (No Lineal)
+ * F = k * dx * (1 + beta * dx^2)
+ */
+function calculateSpringForce(k: number, dx: number): number {
+  return k * dx * (1 + HARDENING_COEFFICIENT * dx * dx);
+}
+
+/**
+ * Calcula el coeficiente de amortiguamiento crítico
+ * c = 2 * zeta * sqrt(k * m)
+ */
+function calculateDamping(zeta: number, k: number, m: number): number {
+  return 2 * zeta * Math.sqrt(k * m);
+}
+
+/**
+ * Calcula la masa reducida para un sistema de dos cuerpos
+ * mu = (m1 * m2) / (m1 + m2)
+ */
+function calculateReducedMass(m1: number, m2: number): number {
+  return (m1 * m2) / (m1 + m2);
+}
+
 function derivatives(
   state: StateVector,
   params: SystemParams,
   F: number
 ): StateVector {
-  const { masses, springs, dampers } = params;
+  const { masses, springs, dampingRatios } = params;
   const { x1, v1, x2, v2, x3, v3 } = state;
 
   const [m1, m2, m3] = masses;
   const [k1, k2, k3] = springs;
-  const [c1, c2, c3] = dampers;
+  const [z1, z2, z3] = dampingRatios;
 
-  // Fuerzas básicas de resortes y amortiguadores
-  let f1 = -k1 * x1 - c1 * v1 + k2 * (x2 - x1) + c2 * (v2 - v1) + F;
-  let f2 = -k2 * (x2 - x1) - c2 * (v2 - v1) + k3 * (x3 - x2) + c3 * (v3 - v2);
-  let f3 = -k3 * (x3 - x2) - c3 * (v3 - v2);
+  // Calcular coeficientes de amortiguamiento reales basados en zeta
+  // Para amortiguadores acoplados (c2, c3), se utiliza la masa reducida (mu)
+  // mu representa la inercia efectiva del modo de vibración relativo
+  const c1 = calculateDamping(z1, k1, m1);
+  const c2 = calculateDamping(z2, k2, calculateReducedMass(m1, m2));
+  const c3 = calculateDamping(z3, k3, calculateReducedMass(m2, m3));
 
-  // --- LÓGICA DE COLISIONES ---
-  
-  // Posiciones en el mundo (World Space)
+  // Diferenciales de posición (deformación de resortes)
+  const dx1 = x1;        // Resorte 1 (Pared a Masa 1)
+  const dx2 = x2 - x1;   // Resorte 2 (Masa 1 a Masa 2)
+  const dx3 = x3 - x2;   // Resorte 3 (Masa 2 a Masa 3)
+
+  // Fuerzas de resortes no lineales
+  const fs1 = calculateSpringForce(k1, dx1);
+  const fs2 = calculateSpringForce(k2, dx2);
+  const fs3 = calculateSpringForce(k3, dx3);
+
+  // Ecuaciones de movimiento acopladas
+  // f1 = F_ext - F_resorte1 - F_amort1 + F_resorte2 + F_amort2
+  let f1 = F - fs1 - c1 * v1 + fs2 + c2 * (v2 - v1);
+  let f2 = -fs2 - c2 * (v2 - v1) + fs3 + c3 * (v3 - v2);
+  let f3 = -fs3 - c3 * (v3 - v2);
+
+  // --- LÓGICA DE COLISIONES (PENALIZACIÓN) ---
   const mw1 = BASE_POSITIONS[0] + x1 * SCALE;
   const mw2 = BASE_POSITIONS[1] + x2 * SCALE;
   const mw3 = BASE_POSITIONS[2] + x3 * SCALE;
@@ -88,7 +129,6 @@ function derivatives(
   // 1. Masa 1 vs Pared
   const distWall = (mw1 - HALF_MASS) - WALL_EDGE;
   if (distWall < 0) {
-    // Fuerza de repulsión hacia la derecha (+)
     f1 += (-K_CONTACT * distWall - C_CONTACT * v1) / SCALE;
   }
 
@@ -97,8 +137,8 @@ function derivatives(
   if (dist12 < 0) {
     const vRel = v2 - v1;
     const repForce = -K_CONTACT * dist12 - C_CONTACT * vRel;
-    f1 -= repForce / SCALE; // Empuja m1 a la izquierda
-    f2 += repForce / SCALE; // Empuja m2 a la derecha
+    f1 -= repForce / SCALE;
+    f2 += repForce / SCALE;
   }
 
   // 3. Masa 2 vs Masa 3
@@ -171,7 +211,7 @@ export function getForceFunction(config: ForceConfig): (t: number) => number {
   }
 }
 
-// Analítica por Transformada de Laplace para fuerza escalón
+// Analítica por Transformada de Laplace (Linearización local)
 export function laplaceStep(
   params: SystemParams,
   force: ForceConfig,
@@ -188,7 +228,11 @@ export function laplaceStep(
 
   const [m1, m2, m3] = params.masses;
   const [k1, k2, k3] = params.springs;
-  const [c1, c2, c3] = params.dampers;
+  const [z1, z2, z3] = params.dampingRatios;
+
+  const c1 = calculateDamping(z1, k1, m1);
+  const c2 = calculateDamping(z2, k2, calculateReducedMass(m1, m2));
+  const c3 = calculateDamping(z3, k3, calculateReducedMass(m2, m3));
 
   const A: number[][] = [
     [0, 0, 0, 1, 0, 0],

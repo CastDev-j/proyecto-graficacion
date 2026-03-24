@@ -39,9 +39,9 @@ export function SimulationHUD() {
         ))}
       </div>
       <div className="grid grid-cols-3 gap-1">
-        {parameters.dampers.map((c, i) => (
+        {parameters.dampingRatios.map((z, i) => (
           <div key={i} className="text-center">
-            c{i + 1}: {c.toFixed(2)}
+            ζ{i + 1}: {z.toFixed(2)}
           </div>
         ))}
       </div>

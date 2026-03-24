@@ -6,7 +6,7 @@ const { DATA_SAMPLE_INTERVAL, MAX_DATA_POINTS } = SIMULATION_CONSTANTS;
 export interface SystemParams {
   masses: [number, number, number];
   springs: [number, number, number];
-  dampers: [number, number, number];
+  dampingRatios: [number, number, number]; // zeta (0 a 1+)
 }
 
 export interface ForceConfig {
@@ -70,8 +70,8 @@ interface SimulationStore {
 export const useSimulationStore = create<SimulationStore>((set, get) => ({
   parameters: {
     masses: [1.0, 1.0, 1.0],
-    springs: [10.0, 10.0, 10.0],
-    dampers: [0.5, 0.5, 0.5],
+    springs: [15.0, 15.0, 15.0],
+    dampingRatios: [0.05, 0.05, 0.05], // zeta por defecto
   },
   force: {
     type: "sine",
@@ -334,23 +334,23 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
     const presets = {
       underdamped: {
         masses: [1.0, 1.0, 1.0] as [number, number, number],
-        springs: [20.0, 20.0, 20.0] as [number, number, number],
-        dampers: [0.5, 0.5, 0.5] as [number, number, number],
+        springs: [30.0, 30.0, 30.0] as [number, number, number],
+        dampingRatios: [0.02, 0.02, 0.02] as [number, number, number],
       },
       critical: {
         masses: [1.0, 1.0, 1.0] as [number, number, number],
-        springs: [10.0, 10.0, 10.0] as [number, number, number],
-        dampers: [6.32, 6.32, 6.32] as [number, number, number],
+        springs: [15.0, 15.0, 15.0] as [number, number, number],
+        dampingRatios: [1.0, 1.0, 1.0] as [number, number, number],
       },
       overdamped: {
         masses: [1.0, 1.0, 1.0] as [number, number, number],
-        springs: [10.0, 10.0, 10.0] as [number, number, number],
-        dampers: [10.0, 10.0, 10.0] as [number, number, number],
+        springs: [15.0, 15.0, 15.0] as [number, number, number],
+        dampingRatios: [2.5, 2.5, 2.5] as [number, number, number],
       },
       resonance: {
         masses: [1.0, 1.0, 1.0] as [number, number, number],
-        springs: [15.0, 15.0, 15.0] as [number, number, number],
-        dampers: [0.2, 0.2, 0.2] as [number, number, number],
+        springs: [12.0, 12.0, 12.0] as [number, number, number],
+        dampingRatios: [0.005, 0.005, 0.005] as [number, number, number],
       },
     };
     set((state) => ({
