@@ -1,7 +1,7 @@
 import { create } from "zustand";
+import { SIMULATION_CONSTANTS } from "./constants";
 
-const DATA_SAMPLE_INTERVAL = 0.03;
-const MAX_DATA_POINTS = 1500;
+const { DATA_SAMPLE_INTERVAL, MAX_DATA_POINTS } = SIMULATION_CONSTANTS;
 
 export interface SystemParams {
   masses: [number, number, number];
@@ -32,12 +32,6 @@ export interface SimulationData {
   energies: { kinetic: number[]; potential: number[]; total: number[] };
 }
 
-export interface AnalysisData {
-  naturalFrequencies: number[];
-  dampingRatios: number[];
-  modeShapes: number[][];
-  poles: { real: number; imag: number }[];
-}
 
 interface SimulationStore {
   parameters: SystemParams;
@@ -55,11 +49,7 @@ interface SimulationStore {
   simulationData: SimulationData;
   resultsSnapshot: SimulationData | null;
   resultsSnapshotTime: number | null;
-  analysisData: AnalysisData | null;
   currentState: StateVector;
-
-  fourierHarmonics: number;
-  fourierCoefficients: { a0: number; an: number[]; bn: number[] };
 
   setParameters: (params: Partial<SystemParams>) => void;
   setForce: (force: Partial<ForceConfig>) => void;
@@ -72,8 +62,6 @@ interface SimulationStore {
   captureResultsSnapshot: () => void;
   clearResultsSnapshot: () => void;
   setSimulationData: (data: SimulationData) => void;
-  setAnalysisData: (data: AnalysisData) => void;
-  setFourierHarmonics: (n: number) => void;
   loadPreset: (
     preset: "underdamped" | "critical" | "overdamped" | "resonance",
   ) => void;
@@ -106,10 +94,7 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
   },
   resultsSnapshot: null,
   resultsSnapshotTime: null,
-  analysisData: null,
   currentState: { x1: 0, v1: 0, x2: 0, v2: 0, x3: 0, v3: 0 },
-  fourierHarmonics: 10,
-  fourierCoefficients: { a0: 0, an: [], bn: [] },
 
   // Actions
   setParameters: (params) =>
@@ -344,8 +329,6 @@ export const useSimulationStore = create<SimulationStore>((set, get) => ({
     }),
 
   setSimulationData: (data) => set({ simulationData: data }),
-  setAnalysisData: (data) => set({ analysisData: data }),
-  setFourierHarmonics: (n) => set({ fourierHarmonics: n }),
 
   loadPreset: (preset) => {
     const presets = {
