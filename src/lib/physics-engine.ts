@@ -1,4 +1,4 @@
-import { expm, multiply, subtract, inv, matrix, add, identity } from "mathjs";
+import { expm, multiply, subtract, inv, matrix, add, identity, type Matrix } from "mathjs";
 import type { SystemParams, StateVector, ForceConfig } from "./store";
 import { SIMULATION_CONSTANTS } from "./constants";
 
@@ -277,8 +277,8 @@ export function laplaceStep(
   const A_inv = inv(A_mat);
   const Bf = multiply(B_mat, F_mat);
   const diff = subtract(E, I6);
-  const s_tau = multiply(multiply(A_inv, diff), Bf);
-  const arr = (s_tau as any).toArray().map((row: number[]) => row[0]);
+  const s_tau = multiply(multiply(A_inv, diff), Bf) as Matrix;
+  const arr = s_tau.toArray().map((row: unknown) => (row as number[])[0]);
 
   return {
     x1: arr[0],
