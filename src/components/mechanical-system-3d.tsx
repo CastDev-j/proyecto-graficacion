@@ -2,10 +2,21 @@
 
 import { useRef, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
-import { Html } from "@react-three/drei";
 import { useSimulationStore } from "@/lib/store";
 import { rk4Step, getForceFunction, laplaceStep } from "@/lib/physics-engine";
-import * as THREE from "three";
+import { SIMULATION_CONSTANTS } from "@/lib/constants";
+
+// Nuevos componentes modulares
+import { Mass } from "./simulation/mass";
+import { ConnectionModule } from "./simulation/connection-module";
+
+const {
+  SCALE,
+  HALF_MASS,
+  WALL_X,
+  WALL_THICKNESS,
+  BASE_POSITIONS,
+} = SIMULATION_CONSTANTS;
 
 export function MechanicalSystem3D() {
   const currentState = useSimulationStore((state) => state.currentState);
@@ -47,19 +58,21 @@ export function MechanicalSystem3D() {
 
   const { x1, x2, x3 } = currentState;
 
-  const basePositions = [-2.5, 0, 2.5] as const;
-  const wallX = -4.2;
-  const scale = 0.9;
+  const p1: [number, number, number] = [BASE_POSITIONS[0] + x1 * SCALE, 0, 0];
+  const p2: [number, number, number] = [BASE_POSITIONS[1] + x2 * SCALE, 0, 0];
+  const p3: [number, number, number] = [BASE_POSITIONS[2] + x3 * SCALE, 0, 0];
+  
+  const wallHalfThickness = WALL_THICKNESS / 2;
+  const springStartOffset = 0.01;
 
-  const p1: [number, number, number] = [basePositions[0] + x1 * scale, 0, 0];
-  const p2: [number, number, number] = [basePositions[1] + x2 * scale, 0, 0];
-  const p3: [number, number, number] = [basePositions[2] + x3 * scale, 0, 0];
-  const halfMass = 0.6;
-  const wallHalfThickness = 0.25;
+  // Calibración exacta de longitud natural (L0) en reposo
+  const L0_1 = Math.abs((BASE_POSITIONS[0] - HALF_MASS) - (WALL_X + wallHalfThickness + springStartOffset));
+  const L0_2 = Math.abs((BASE_POSITIONS[1] - HALF_MASS) - (BASE_POSITIONS[0] + HALF_MASS));
+  const L0_3 = Math.abs((BASE_POSITIONS[2] - HALF_MASS) - (BASE_POSITIONS[1] + HALF_MASS));
 
   return (
     <group position={[0, 0, 0]}>
-      <mesh position={[wallX, 0, 0]}>
+      <mesh position={[WALL_X, 0, 0]}>
         <boxGeometry args={[0.5, 4, 2]} />
         <meshBasicMaterial color="#6d28d9" />
       </mesh>
@@ -78,10 +91,11 @@ export function MechanicalSystem3D() {
         color="#8b5cf6"
       />
       <ConnectionModule
-        start={[wallX + wallHalfThickness + 0.01, 0, 0]}
-        end={[p1[0] - halfMass, 0, 0]}
+        start={[WALL_X + wallHalfThickness + 0.01, 0, 0]}
+        end={[p1[0] - HALF_MASS, 0, 0]}
         colorSpring="#a78bfa"
         colorPiston="#64748b"
+        naturalLength={L0_1}
       />
 
       <Mass
@@ -91,10 +105,11 @@ export function MechanicalSystem3D() {
         color="#a855f7"
       />
       <ConnectionModule
-        start={[p1[0] + halfMass, 0, 0]}
-        end={[p2[0] - halfMass, 0, 0]}
+        start={[p1[0] + HALF_MASS, 0, 0]}
+        end={[p2[0] - HALF_MASS, 0, 0]}
         colorSpring="#c084fc"
         colorPiston="#64748b"
+        naturalLength={L0_2}
       />
 
       <Mass
@@ -104,119 +119,12 @@ export function MechanicalSystem3D() {
         color="#c026d3"
       />
       <ConnectionModule
-        start={[p2[0] + halfMass, 0, 0]}
-        end={[p3[0] - halfMass, 0, 0]}
+        start={[p2[0] + HALF_MASS, 0, 0]}
+        end={[p3[0] - HALF_MASS, 0, 0]}
         colorSpring="#d8b4fe"
         colorPiston="#64748b"
+        naturalLength={L0_3}
       />
-    </group>
-  );
-}
-
-function Mass({
-  position,
-  label,
-  value,
-  color,
-}: {
-  position: [number, number, number];
-  label: string;
-  value: number;
-  color: string;
-}) {
-  const geometry = useMemo(() => new THREE.BoxGeometry(1.2, 1.2, 1.2), []);
-
-  return (
-    <group position={position}>
-      <mesh geometry={geometry}>
-        <meshBasicMaterial color={color} />
-      </mesh>
-      <Html position={[0, 0, 0.65]} center distanceFactor={8} occlude={false}>
-        <div className="text-white font-bold text-2xl pointer-events-none select-none">
-          {label}
-        </div>
-      </Html>
-      <Html position={[0, -0.9, 0]} center distanceFactor={8} occlude={false}>
-        <div
-          className="font-mono text-sm pointer-events-none select-none"
-          style={{ color }}
-        >
-          {value.toFixed(1)} kg
-        </div>
-      </Html>
-    </group>
-  );
-}
-
-function ConnectionModule({
-  start,
-  end,
-  colorSpring,
-  colorPiston,
-}: {
-  start: [number, number, number];
-  end: [number, number, number];
-  colorSpring: string;
-  colorPiston: string;
-}) {
-  const { length, rotY, rotZ, curve, samples } = useMemo(() => {
-    const startVec = new THREE.Vector3(...start);
-    const endVec = new THREE.Vector3(...end);
-    const dir = new THREE.Vector3().subVectors(endVec, startVec);
-    const length = dir.length();
-
-    const coils = 5;
-    const radius = 0.18;
-    const points: THREE.Vector3[] = [];
-    const samples = coils * 8;
-    for (let i = 0; i <= samples; i++) {
-      const t = i / samples;
-      const angle = t * coils * Math.PI * 2;
-      points.push(
-        new THREE.Vector3(
-          t * length,
-          Math.cos(angle) * radius,
-          Math.sin(angle) * radius,
-        ),
-      );
-    }
-    const curve = new THREE.CatmullRomCurve3(points);
-
-    const rotY = Math.atan2(dir.z, dir.x);
-    const rotZ = Math.atan2(dir.y, Math.sqrt(dir.x * dir.x + dir.z * dir.z));
-
-    return { length, rotY, rotZ, curve, samples };
-  }, [start, end]);
-
-  if (length < 0.001) return null;
-
-  // Piston dimensions
-  const pistonOuterRadius = 0.12;
-  const pistonInnerRadius = 0.06;
-  const housingLength = length * 0.45;
-  const rodLength = length * 0.45;
-
-  return (
-    <group position={start} rotation={[0, rotY, rotZ]}>
-      {/* Spring */}
-      <mesh position={[0, 0, 0]}>
-        <tubeGeometry args={[curve, samples, 0.035, 5, false]} />
-        <meshBasicMaterial color={colorSpring} />
-      </mesh>
-      {/* Housing (left) */}
-      <mesh position={[length * 0.25, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
-        <cylinderGeometry
-          args={[pistonOuterRadius, pistonOuterRadius, housingLength, 8]}
-        />
-        <meshBasicMaterial color={colorPiston} />
-      </mesh>
-      {/* Rod (right) */}
-      <mesh position={[length * 0.75, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
-        <cylinderGeometry
-          args={[pistonInnerRadius, pistonInnerRadius, rodLength, 8]}
-        />
-        <meshBasicMaterial color={colorPiston} />
-      </mesh>
     </group>
   );
 }

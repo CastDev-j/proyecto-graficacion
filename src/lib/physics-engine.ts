@@ -1,5 +1,20 @@
-import type { SystemParams, StateVector, ForceConfig } from "./store";
 import { expm, multiply, subtract, inv, matrix, add, identity } from "mathjs";
+import type { SystemParams, StateVector, ForceConfig } from "./store";
+import { SIMULATION_CONSTANTS } from "./constants";
+
+const {
+  SCALE,
+  HALF_MASS,
+  WALL_X,
+  WALL_THICKNESS,
+  BASE_POSITIONS,
+  K_CONTACT,
+  C_CONTACT,
+  SUB_STEPS,
+  HARDENING_COEFFICIENT,
+} = SIMULATION_CONSTANTS;
+
+const WALL_EDGE = WALL_X + WALL_THICKNESS;
 
 export function rk4Step(
   state: StateVector,
@@ -8,33 +23,67 @@ export function rk4Step(
   dt: number,
   t: number
 ): StateVector {
-  const k1 = derivatives(state, params, force(t));
-  const k2 = derivatives(
-    addStates(state, scaleState(k1, dt / 2)),
-    params,
-    force(t + dt / 2)
-  );
-  const k3 = derivatives(
-    addStates(state, scaleState(k2, dt / 2)),
-    params,
-    force(t + dt / 2)
-  );
-  const k4 = derivatives(
-    addStates(state, scaleState(k3, dt)),
-    params,
-    force(t + dt)
-  );
+  // Sub-stepping para estabilidad numérica en colisiones y no-linealidad
+  const subDt = dt / SUB_STEPS;
+  let currentState = state;
+  let currentTime = t;
 
-  const k = {
-    x1: (k1.x1 + 2 * k2.x1 + 2 * k3.x1 + k4.x1) / 6,
-    v1: (k1.v1 + 2 * k2.v1 + 2 * k3.v1 + k4.v1) / 6,
-    x2: (k1.x2 + 2 * k2.x2 + 2 * k3.x2 + k4.x2) / 6,
-    v2: (k1.v2 + 2 * k2.v2 + 2 * k3.v2 + k4.v2) / 6,
-    x3: (k1.x3 + 2 * k2.x3 + 2 * k3.x3 + k4.x3) / 6,
-    v3: (k1.v3 + 2 * k2.v3 + 2 * k3.v3 + k4.v3) / 6,
-  };
+  for (let i = 0; i < SUB_STEPS; i++) {
+    const k1 = derivatives(currentState, params, force(currentTime));
+    const k2 = derivatives(
+      addStates(currentState, scaleState(k1, subDt / 2)),
+      params,
+      force(currentTime + subDt / 2)
+    );
+    const k3 = derivatives(
+      addStates(currentState, scaleState(k2, subDt / 2)),
+      params,
+      force(currentTime + subDt / 2)
+    );
+    const k4 = derivatives(
+      addStates(currentState, scaleState(k3, subDt)),
+      params,
+      force(currentTime + subDt)
+    );
 
-  return addStates(state, scaleState(k, dt));
+    const k = {
+      x1: (k1.x1 + 2 * k2.x1 + 2 * k3.x1 + k4.x1) / 6,
+      v1: (k1.v1 + 2 * k2.v1 + 2 * k3.v1 + k4.v1) / 6,
+      x2: (k1.x2 + 2 * k2.x2 + 2 * k3.x2 + k4.x2) / 6,
+      v2: (k1.v2 + 2 * k2.v2 + 2 * k3.v2 + k4.v2) / 6,
+      x3: (k1.x3 + 2 * k2.x3 + 2 * k3.x3 + k4.x3) / 6,
+      v3: (k1.v3 + 2 * k2.v3 + 2 * k3.v3 + k4.v3) / 6,
+    };
+
+    currentState = addStates(currentState, scaleState(k, subDt));
+    currentTime += subDt;
+  }
+
+  return currentState;
+}
+
+/**
+ * Calcula la fuerza de un resorte real (No Lineal)
+ * F = k * dx * (1 + beta * dx^2)
+ */
+function calculateSpringForce(k: number, dx: number): number {
+  return k * dx * (1 + HARDENING_COEFFICIENT * dx * dx);
+}
+
+/**
+ * Calcula el coeficiente de amortiguamiento crítico
+ * c = 2 * zeta * sqrt(k * m)
+ */
+function calculateDamping(zeta: number, k: number, m: number): number {
+  return 2 * zeta * Math.sqrt(k * m);
+}
+
+/**
+ * Calcula la masa reducida para un sistema de dos cuerpos
+ * mu = (m1 * m2) / (m1 + m2)
+ */
+function calculateReducedMass(m1: number, m2: number): number {
+  return (m1 * m2) / (m1 + m2);
 }
 
 function derivatives(
@@ -42,25 +91,72 @@ function derivatives(
   params: SystemParams,
   F: number
 ): StateVector {
-  const { masses, springs, dampers } = params;
+  const { masses, springs, dampingRatios } = params;
   const { x1, v1, x2, v2, x3, v3 } = state;
 
   const [m1, m2, m3] = masses;
   const [k1, k2, k3] = springs;
-  const [c1, c2, c3] = dampers;
+  const [z1, z2, z3] = dampingRatios;
 
-  const a1 = (-k1 * x1 - c1 * v1 + k2 * (x2 - x1) + c2 * (v2 - v1) + F) / m1;
-  const a2 =
-    (-k2 * (x2 - x1) - c2 * (v2 - v1) + k3 * (x3 - x2) + c3 * (v3 - v2)) / m2;
-  const a3 = (-k3 * (x3 - x2) - c3 * (v3 - v2)) / m3;
+  // Calcular coeficientes de amortiguamiento reales basados en zeta
+  // Para amortiguadores acoplados (c2, c3), se utiliza la masa reducida (mu)
+  // mu representa la inercia efectiva del modo de vibración relativo
+  const c1 = calculateDamping(z1, k1, m1);
+  const c2 = calculateDamping(z2, k2, calculateReducedMass(m1, m2));
+  const c3 = calculateDamping(z3, k3, calculateReducedMass(m2, m3));
+
+  // Diferenciales de posición (deformación de resortes)
+  const dx1 = x1;        // Resorte 1 (Pared a Masa 1)
+  const dx2 = x2 - x1;   // Resorte 2 (Masa 1 a Masa 2)
+  const dx3 = x3 - x2;   // Resorte 3 (Masa 2 a Masa 3)
+
+  // Fuerzas de resortes no lineales
+  const fs1 = calculateSpringForce(k1, dx1);
+  const fs2 = calculateSpringForce(k2, dx2);
+  const fs3 = calculateSpringForce(k3, dx3);
+
+  // Ecuaciones de movimiento acopladas
+  // f1 = F_ext - F_resorte1 - F_amort1 + F_resorte2 + F_amort2
+  let f1 = F - fs1 - c1 * v1 + fs2 + c2 * (v2 - v1);
+  let f2 = -fs2 - c2 * (v2 - v1) + fs3 + c3 * (v3 - v2);
+  let f3 = -fs3 - c3 * (v3 - v2);
+
+  // --- LÓGICA DE COLISIONES (PENALIZACIÓN) ---
+  const mw1 = BASE_POSITIONS[0] + x1 * SCALE;
+  const mw2 = BASE_POSITIONS[1] + x2 * SCALE;
+  const mw3 = BASE_POSITIONS[2] + x3 * SCALE;
+
+  // 1. Masa 1 vs Pared
+  const distWall = (mw1 - HALF_MASS) - WALL_EDGE;
+  if (distWall < 0) {
+    f1 += (-K_CONTACT * distWall - C_CONTACT * v1) / SCALE;
+  }
+
+  // 2. Masa 1 vs Masa 2
+  const dist12 = (mw2 - HALF_MASS) - (mw1 + HALF_MASS);
+  if (dist12 < 0) {
+    const vRel = v2 - v1;
+    const repForce = -K_CONTACT * dist12 - C_CONTACT * vRel;
+    f1 -= repForce / SCALE;
+    f2 += repForce / SCALE;
+  }
+
+  // 3. Masa 2 vs Masa 3
+  const dist23 = (mw3 - HALF_MASS) - (mw2 + HALF_MASS);
+  if (dist23 < 0) {
+    const vRel = v3 - v2;
+    const repForce = -K_CONTACT * dist23 - C_CONTACT * vRel;
+    f2 -= repForce / SCALE;
+    f3 += repForce / SCALE;
+  }
 
   return {
     x1: v1,
-    v1: a1,
+    v1: f1 / m1,
     x2: v2,
-    v2: a2,
+    v2: f2 / m2,
     x3: v3,
-    v3: a3,
+    v3: f3 / m3,
   };
 }
 
@@ -115,58 +211,7 @@ export function getForceFunction(config: ForceConfig): (t: number) => number {
   }
 }
 
-export function computeFourierCoefficients(
-  type: "sawtooth" | "square" | "triangle",
-  amplitude: number,
-  nTerms: number
-): { a0: number; an: number[]; bn: number[] } {
-  const an: number[] = [];
-  const bn: number[] = [];
-
-  switch (type) {
-    case "sawtooth":
-      for (let n = 1; n <= nTerms; n++) {
-        an.push(0);
-        bn.push(-(amplitude / (Math.PI * n)));
-      }
-      return { a0: amplitude / 2, an, bn };
-
-    case "square":
-      for (let n = 1; n <= nTerms; n++) {
-        an.push(0);
-        bn.push(n % 2 === 1 ? (4 * amplitude) / (Math.PI * n) : 0);
-      }
-      return { a0: 0, an, bn };
-
-    case "triangle":
-      for (let n = 1; n <= nTerms; n++) {
-        an.push(0);
-        const sign = ((n - 1) / 2) % 2 === 0 ? 1 : -1;
-        bn.push(
-          n % 2 === 1 ? (8 * amplitude * sign) / (Math.PI * Math.PI * n * n) : 0
-        );
-      }
-      return { a0: 0, an, bn };
-
-    default:
-      return { a0: 0, an: [], bn: [] };
-  }
-}
-
-export function computeNaturalFrequencies(params: SystemParams): number[] {
-  const { masses, springs } = params;
-  const [m1, m2, m3] = masses;
-  const [k1, k2, k3] = springs;
-
-  const omega1 = Math.sqrt(k1 / m1);
-  const omega2 = Math.sqrt((k1 + k2) / m2);
-  const omega3 = Math.sqrt((k2 + k3) / m3);
-
-  return [omega1, omega2, omega3].sort((a, b) => a - b);
-}
-
-// Analítica por Transformada de Laplace para fuerza escalón
-// Resuelve el sistema lineal M x'' + C x' + K x = F aplicando fuerza al primer nodo.
+// Analítica por Transformada de Laplace (Linearización local)
 export function laplaceStep(
   params: SystemParams,
   force: ForceConfig,
@@ -183,10 +228,12 @@ export function laplaceStep(
 
   const [m1, m2, m3] = params.masses;
   const [k1, k2, k3] = params.springs;
-  const [c1, c2, c3] = params.dampers;
+  const [z1, z2, z3] = params.dampingRatios;
 
-  // Matriz dinámica del sistema en forma de primer orden: s' = A s + B F
-  // s = [x1,x2,x3,v1,v2,v3]^T
+  const c1 = calculateDamping(z1, k1, m1);
+  const c2 = calculateDamping(z2, k2, calculateReducedMass(m1, m2));
+  const c3 = calculateDamping(z3, k3, calculateReducedMass(m2, m3));
+
   const A: number[][] = [
     [0, 0, 0, 1, 0, 0],
     [0, 0, 0, 0, 1, 0],
@@ -196,29 +243,24 @@ export function laplaceStep(
     [0, k3 / m3, -k3 / m3, 0, c3 / m3, -c3 / m3],
   ];
 
-  // B mapea fuerzas sobre masas a aceleraciones (solo usamos primera masa)
   const B: number[][] = [
     [0, 0, 0],
     [0, 0, 0],
     [0, 0, 0],
     [1 / m1, 0, 0],
     [0, 1 / m2, 0],
-    [0, 0, 1 / m3],
+    [0, 1 / m3, 0],
   ];
 
-  // Vector de fuerza (solo componente en masa 1)
   const Fvec = [amplitude, 0, 0];
-
   const A_mat = matrix(A);
   const B_mat = matrix(B);
   const F_mat = matrix([[Fvec[0]], [Fvec[1]], [Fvec[2]]]);
 
-  // e^{A tau}
   let E;
   try {
     E = expm(multiply(A_mat, tau));
   } catch {
-    // Fallback simple serie si expm no disponible
     const I = identity(6);
     let term = I;
     let result = I;
@@ -233,10 +275,9 @@ export function laplaceStep(
 
   const I6 = identity(6);
   const A_inv = inv(A_mat);
-  const Bf = multiply(B_mat, F_mat); // 6x1
-  // s(tau) = A^{-1}(e^{A tau} - I) B F (estado inicial cero)
+  const Bf = multiply(B_mat, F_mat);
   const diff = subtract(E, I6);
-  const s_tau = multiply(multiply(A_inv, diff), Bf); // 6x1 vector
+  const s_tau = multiply(multiply(A_inv, diff), Bf);
   const arr = (s_tau as any).toArray().map((row: number[]) => row[0]);
 
   return {
