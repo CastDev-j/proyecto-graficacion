@@ -1,5 +1,5 @@
 import type { StateCreator } from "zustand";
-import type { SimulationStore, SimulationSlice, StateVector } from "../types";
+import type { SimulationStore, SimulationSlice } from "../types";
 import { SIMULATION_CONSTANTS, INITIAL_SIMULATION_DATA } from "../../constants";
 
 const { DATA_SAMPLE_INTERVAL, MAX_DATA_POINTS } = SIMULATION_CONSTANTS;

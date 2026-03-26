@@ -24,10 +24,15 @@ interface LineConfig {
   name: string;
 }
 
+interface ChartData {
+  t: number;
+  [key: string]: number;
+}
+
 interface ResultsChartProps {
   title: string;
   description: string;
-  data: any[];
+  data: ChartData[];
   lines: LineConfig[];
   inPopover?: boolean;
   tourId?: string;

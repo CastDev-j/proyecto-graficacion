@@ -1,5 +1,5 @@
 import type { StateCreator } from "zustand";
-import type { SimulationStore, ParamsSlice, SystemParams, ForceConfig } from "../types";
+import type { SimulationStore, ParamsSlice } from "../types";
 import { INITIAL_SIMULATION_DATA } from "../../constants";
 
 export const createParamsSlice: StateCreator<
