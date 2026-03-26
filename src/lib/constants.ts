@@ -26,3 +26,10 @@ export const SIMULATION_CONSTANTS = {
   // zeta < 1: subamortiguado, 1: crítico, > 1: sobreamortiguado
   DEFAULT_ZETA: 0.05, 
 };
+
+export const INITIAL_SIMULATION_DATA = {
+  time: [] as number[],
+  positions: { x1: [] as number[], x2: [] as number[], x3: [] as number[] },
+  velocities: { v1: [] as number[], v2: [] as number[], v3: [] as number[] },
+  energies: { kinetic: [] as number[], potential: [] as number[], total: [] as number[] },
+};

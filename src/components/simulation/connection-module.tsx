@@ -1,8 +1,7 @@
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
-import "./fatigue-material"; // Asegura que el shaderMaterial esté registrado
-
+import "./fatigue-material";
 interface ConnectionModuleProps {
   start: [number, number, number];
   end: [number, number, number];
@@ -53,11 +52,11 @@ export function ConnectionModule({
     if (springMatRef.current) {
       const diff = length - naturalLength;
       const deformation = Math.abs(diff);
-      
+
       // Sensibilidad asimétrica: más fuerte en compresión (diff < 0)
-      const multiplier = diff < 0 ? 3.8 : 2.5; 
+      const multiplier = diff < 0 ? 3.8 : 2.5;
       const stressTarget = Math.min(deformation * multiplier, 1.0);
-      
+
       springMatRef.current.uStress = THREE.MathUtils.lerp(
         springMatRef.current.uStress,
         stressTarget,
@@ -77,13 +76,13 @@ export function ConnectionModule({
     <group position={start} rotation={[0, rotY, rotZ]}>
       <mesh position={[0, 0, 0]}>
         <tubeGeometry args={[curve, samples, 0.04, 8, false]} />
-        <fatigueMaterial 
-          ref={springMatRef} 
-          uBaseColor={new THREE.Color(colorSpring)} 
-          uFatigueColor={new THREE.Color("#ff0000")} 
+        <fatigueMaterial
+          ref={springMatRef}
+          uBaseColor={new THREE.Color(colorSpring)}
+          uFatigueColor={new THREE.Color("#ff0000")}
         />
       </mesh>
-      
+
       <mesh position={[length * 0.25, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
         <cylinderGeometry
           args={[pistonOuterRadius, pistonOuterRadius, housingLength, 12]}

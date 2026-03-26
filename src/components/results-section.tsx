@@ -1,43 +1,21 @@
 "use client";
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts";
 import { useSimulationStore } from "@/lib/store";
 import { useMemo } from "react";
 import { cn } from "@/lib/utils";
+import { INITIAL_SIMULATION_DATA } from "@/lib/constants";
 
-const EMPTY_RESULTS = {
-  time: [] as number[],
-  positions: { x1: [] as number[], x2: [] as number[], x3: [] as number[] },
-  velocities: { v1: [] as number[], v2: [] as number[], v3: [] as number[] },
-  energies: {
-    kinetic: [] as number[],
-    potential: [] as number[],
-    total: [] as number[],
-  },
-};
+// Mini-components
+import { ResultsHeader } from "./results/results-header";
+import { ResultsEmptyState } from "./results/results-empty-state";
+import { SnapshotControls } from "./results/snapshot-controls";
+import { ResultsChart } from "./results/results-chart";
 
 export function ResultsSection({ inPopover = false }: { inPopover?: boolean }) {
   const isRunning = useSimulationStore((state) => state.isRunning);
   const simulationData = useSimulationStore((state) =>
     state.isRunning
-      ? (state.resultsSnapshot ?? EMPTY_RESULTS)
+      ? (state.resultsSnapshot ?? INITIAL_SIMULATION_DATA)
       : state.simulationData,
   );
   const resultsSnapshotTime = useSimulationStore(
@@ -88,271 +66,61 @@ export function ResultsSection({ inPopover = false }: { inPopover?: boolean }) {
       data-tour="results-section"
     >
       <div className={cn(!inPopover && "max-w-7xl mx-auto")}>
-        <div className={cn("text-center", inPopover ? "mb-6" : "mb-10")}>
-          <h2
-            className={cn(
-              "font-bold mb-2",
-              inPopover ? "text-2xl" : "text-4xl",
-            )}
-          >
-            Resultados de la Simulación
-          </h2>
-          <p className="text-base text-muted-foreground">
-            Desplazamientos, velocidades, energías y espacio fase
-          </p>
-          {isRunning && (
-            <p className="text-xs text-primary mt-1">
-              Simulación en progreso. Captura un instante para actualizar las
-              gráficas.
-            </p>
-          )}
-        </div>
+        <ResultsHeader inPopover={inPopover} isRunning={isRunning} />
 
         {!hasData ? (
-          <Card>
-            <CardContent className="py-12 text-center">
-              {isRunning ? (
-                <div className="space-y-3">
-                  <p className="text-muted-foreground text-sm">
-                    La simulación está corriendo. Pulsa para mostrar resultados
-                    en este instante.
-                  </p>
-                  <Button onClick={captureResultsSnapshot} size="sm">
-                    Mostrar resultados ahora
-                  </Button>
-                </div>
-              ) : (
-                <p className="text-muted-foreground text-sm">
-                  Inicia la simulación para generar resultados.
-                </p>
-              )}
-            </CardContent>
-          </Card>
+          <ResultsEmptyState 
+            isRunning={isRunning} 
+            onCaptureSnapshot={captureResultsSnapshot} 
+          />
         ) : (
           <div className="space-y-4">
             {isRunning && (
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-xs text-muted-foreground">
-                  Mostrando captura en t ={" "}
-                  {resultsSnapshotTime?.toFixed(3) ?? "0.000"} s
-                </p>
-                <Button
-                  onClick={captureResultsSnapshot}
-                  size="sm"
-                  variant="secondary"
-                >
-                  Actualizar captura
-                </Button>
-              </div>
+              <SnapshotControls 
+                resultsSnapshotTime={resultsSnapshotTime} 
+                onCaptureSnapshot={captureResultsSnapshot} 
+              />
             )}
 
             <div className="grid gap-6 md:grid-cols-2">
-              <Card
-                className="overflow-hidden"
-                data-tour="results-displacement"
-              >
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg">Desplazamiento</CardTitle>
-                  <CardDescription className="text-xs">
-                    Posición de cada masa vs tiempo
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <ResponsiveContainer
-                    width="100%"
-                    height={inPopover ? 260 : 330}
-                  >
-                    <LineChart
-                      data={positionData}
-                      margin={{ top: 10, right: 10, left: 0, bottom: 10 }}
-                    >
-                      <CartesianGrid
-                        strokeDasharray="3 3"
-                        stroke="hsl(var(--border))"
-                      />
-                      <XAxis
-                        dataKey="t"
-                        stroke="hsl(var(--foreground))"
-                        tick={{ fontSize: 11 }}
-                      />
-                      <YAxis
-                        stroke="hsl(var(--foreground))"
-                        tick={{ fontSize: 11 }}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "hsl(var(--card))",
-                          border: "1px solid hsl(var(--border))",
-                        }}
-                      />
-                      <Legend wrapperStyle={{ fontSize: 11 }} />
-                      <Line
-                        type="monotone"
-                        dataKey="x1"
-                        stroke="#8b5cf6"
-                        strokeWidth={2}
-                        dot={false}
-                        name="x₁"
-                        isAnimationActive={false}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="x2"
-                        stroke="#a855f7"
-                        strokeWidth={2}
-                        dot={false}
-                        name="x₂"
-                        isAnimationActive={false}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="x3"
-                        stroke="#c084fc"
-                        strokeWidth={2}
-                        dot={false}
-                        name="x₃"
-                        isAnimationActive={false}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
+              <ResultsChart
+                title="Desplazamiento"
+                description="Posición de cada masa vs tiempo"
+                data={positionData}
+                inPopover={inPopover}
+                tourId="results-displacement"
+                lines={[
+                  { dataKey: "x1", stroke: "#8b5cf6", name: "x₁" },
+                  { dataKey: "x2", stroke: "#a855f7", name: "x₂" },
+                  { dataKey: "x3", stroke: "#c084fc", name: "x₃" },
+                ]}
+              />
 
-              <Card className="overflow-hidden" data-tour="results-velocity">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg">Velocidad</CardTitle>
-                  <CardDescription className="text-xs">
-                    Velocidad de cada masa vs tiempo
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <ResponsiveContainer
-                    width="100%"
-                    height={inPopover ? 260 : 330}
-                  >
-                    <LineChart
-                      data={velocityData}
-                      margin={{ top: 10, right: 10, left: 0, bottom: 10 }}
-                    >
-                      <CartesianGrid
-                        strokeDasharray="3 3"
-                        stroke="hsl(var(--border))"
-                      />
-                      <XAxis
-                        dataKey="t"
-                        stroke="hsl(var(--foreground))"
-                        tick={{ fontSize: 11 }}
-                      />
-                      <YAxis
-                        stroke="hsl(var(--foreground))"
-                        tick={{ fontSize: 11 }}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "hsl(var(--card))",
-                          border: "1px solid hsl(var(--border))",
-                        }}
-                      />
-                      <Legend wrapperStyle={{ fontSize: 11 }} />
-                      <Line
-                        type="monotone"
-                        dataKey="v1"
-                        stroke="#8b5cf6"
-                        strokeWidth={2}
-                        dot={false}
-                        name="v₁"
-                        isAnimationActive={false}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="v2"
-                        stroke="#a855f7"
-                        strokeWidth={2}
-                        dot={false}
-                        name="v₂"
-                        isAnimationActive={false}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="v3"
-                        stroke="#c084fc"
-                        strokeWidth={2}
-                        dot={false}
-                        name="v₃"
-                        isAnimationActive={false}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
+              <ResultsChart
+                title="Velocidad"
+                description="Velocidad de cada masa vs tiempo"
+                data={velocityData}
+                inPopover={inPopover}
+                tourId="results-velocity"
+                lines={[
+                  { dataKey: "v1", stroke: "#8b5cf6", name: "v₁" },
+                  { dataKey: "v2", stroke: "#a855f7", name: "v₂" },
+                  { dataKey: "v3", stroke: "#c084fc", name: "v₃" },
+                ]}
+              />
 
-              <Card className="overflow-hidden" data-tour="results-energy">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg">Energía</CardTitle>
-                  <CardDescription className="text-xs">
-                    Cinética, potencial y total
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <ResponsiveContainer
-                    width="100%"
-                    height={inPopover ? 260 : 330}
-                  >
-                    <LineChart
-                      data={energyData}
-                      margin={{ top: 10, right: 10, left: 0, bottom: 10 }}
-                    >
-                      <CartesianGrid
-                        strokeDasharray="3 3"
-                        stroke="hsl(var(--border))"
-                      />
-                      <XAxis
-                        dataKey="t"
-                        stroke="hsl(var(--foreground))"
-                        tick={{ fontSize: 11 }}
-                      />
-                      <YAxis
-                        stroke="hsl(var(--foreground))"
-                        tick={{ fontSize: 11 }}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "hsl(var(--card))",
-                          border: "1px solid hsl(var(--border))",
-                        }}
-                      />
-                      <Legend wrapperStyle={{ fontSize: 11 }} />
-                      <Line
-                        type="monotone"
-                        dataKey="kinetic"
-                        stroke="#8b5cf6"
-                        strokeWidth={2}
-                        dot={false}
-                        name="Cinética"
-                        isAnimationActive={false}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="potential"
-                        stroke="#a855f7"
-                        strokeWidth={2}
-                        dot={false}
-                        name="Potencial"
-                        isAnimationActive={false}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="total"
-                        stroke="#c084fc"
-                        strokeWidth={2}
-                        dot={false}
-                        name="Total"
-                        isAnimationActive={false}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
+              <ResultsChart
+                title="Energía"
+                description="Cinética, potencial y total"
+                data={energyData}
+                inPopover={inPopover}
+                tourId="results-energy"
+                lines={[
+                  { dataKey: "kinetic", stroke: "#8b5cf6", name: "Cinética" },
+                  { dataKey: "potential", stroke: "#a855f7", name: "Potencial" },
+                  { dataKey: "total", stroke: "#c084fc", name: "Total" },
+                ]}
+              />
             </div>
           </div>
         )}
